@@ -1,14 +1,14 @@
 {
-  "timestamp": "2026-02-24T14:54:42.194723",
+  "timestamp": "2026-02-24T14:54:54.899464",
   "input_voltage": 224.4,
   "fault_voltage": 224.4,
   "output_voltage": 224.4,
   "load_percent": 5,
-  "frequency": 50.1,
+  "frequency": 50.0,
   "battery_voltage": 13.1,
   "temperature": null,
   "status_bits": "00001001",
   "on_battery": false,
   "status_text": "LINE",
-  "raw": "(224.4 224.4 224.4 005 50.1 13.1 --.- 00001001\r"
+  "raw": "(224.4 224.4 224.4 005 50.0 13.1 --.- 00001001\r"
 }
