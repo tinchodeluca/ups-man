@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  ups-monitor:
+    image: python:3.11-alpine
+    container_name: vertiv-ups
+    privileged: true
+    restart: unless-stopped
+    
+    # Comando de inicio que instala deps y corre
+    command: >
+      sh -c "
+        apk add --no-cache gcc musl-dev libusb-dev hidapi-dev eudev-dev &&
+        pip install --no-cache-dir hidapi &&
+        python -u /app/ups_monitor.py
+      "
+    
+    environment:
+      - UPS_VID=0x0665
+      - UPS_PID=0x5161
+      - CHECK_INTERVAL=10
+      - SHUTDOWN_VOLTAGE=11.0
+      - SHUTDOWN_DELAY=300
+    
+    volumes:
+      # Montar tu código
+      - /System/UPS/ups-docker/app:/app
+      # Datos y logs
+      - /System/UPS/ups-docker/data:/app/data
+      - /System/UPS/ups-docker/logs:/app/logs
+      # USB
+      - /dev/bus/usb:/dev/bus/usb
+    
+    # O si prefieres device específico:
+    # devices:
+    #   - /dev/hidraw0:/dev/hidraw0
