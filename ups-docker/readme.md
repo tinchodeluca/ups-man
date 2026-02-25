@@ -1,8 +1,17 @@
-UPS Vertiv PSL650 - Monitor para QNAP
+# UPS Vertiv PSL650 - Monitor para QNAP
+
+![Docker](https://img.shields.io/badge/docker-required-blue)
+![Platform](https://img.shields.io/badge/platform-QNAP%20QTS%205.x-lightgrey)
+![Protocol](https://img.shields.io/badge/protocol-Voltronic--QS-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 Monitor de UPS Vertiv PSL650 vía USB usando Docker en QNAP.
-📁 Estructura
-plain
-Copy
+
+---
+
+# 📁 Estructura
+
+```
 /share/UPS/ups-docker/
 ├── app/
 │   ├── ups_monitor.py      # Script principal
@@ -13,10 +22,15 @@ Copy
 │   └── SHUTDOWN_REQUESTED  # Flag de apagado (si aplica)
 └── logs/
     └── ups.log             # Logs con rotación (5MB x 3 archivos)
-🚀 Comandos útiles
-Ver estado
-bash
-Copy
+```
+
+---
+
+# 🚀 Comandos útiles
+
+## 📜 Ver estado
+
+```bash
 # Logs en vivo
 docker -H unix:///var/run/system-docker.sock logs -f vertiv-ups
 
@@ -25,17 +39,25 @@ docker -H unix:///var/run/system-docker.sock logs --tail 50 vertiv-ups
 
 # Estado del contenedor
 docker -H unix:///var/run/system-docker.sock ps
-Datos del UPS
-bash
-Copy
+```
+
+---
+
+## 📊 Datos del UPS
+
+```bash
 # Estado actual (JSON)
 cat /share/UPS/ups-docker/data/ups_status.json
 
 # Eventos de corte
 cat /share/UPS/ups-docker/data/ups_events.json
-Control
-bash
-Copy
+```
+
+---
+
+## 🎛 Control del contenedor
+
+```bash
 # Parar
 docker -H unix:///var/run/system-docker.sock stop vertiv-ups
 
@@ -43,33 +65,75 @@ docker -H unix:///var/run/system-docker.sock stop vertiv-ups
 docker -H unix:///var/run/system-docker.sock start vertiv-ups
 
 # Reiniciar
-docker -H unix:///var/run/system-docker.sock restart vertiz-ups
+docker -H unix:///var/run/system-docker.sock restart vertiv-ups
 
 # Eliminar (conserva datos en /data y /logs)
 docker -H unix:///var/run/system-docker.sock rm vertiv-ups
-⚡ Configuración
-Variables en el comando docker run:
-Table
-Copy
-Variable	Default	Descripción
-CHECK_INTERVAL	10	Segundos entre lecturas
-SHUTDOWN_VOLTAGE	11.0	Voltaje crítico de batería
-SHUTDOWN_DELAY	300	Segundos antes de apagar en corte
-📊 Datos disponibles
-En ups_status.json:
-input_voltage - Tensión de red (V)
-battery_voltage - Tensión de batería (V)
-load_percent - Carga conectada (%)
-on_battery - true/false
-timestamp - Última actualización
-🔋 Apagado automático
-El contenedor puede apagar el NAS cuando:
-Batería < 11.0V, o
-Corte dura > 5 minutos
-Para que funcione, crear script en el NAS que lea el flag:
-bash
-Copy
+```
+
+---
+
+# ⚙ Configuración
+
+Variables configurables en `docker run`:
+
+| Variable | Default | Descripción |
+|-----------|----------|-------------|
+| `CHECK_INTERVAL` | 10 | Segundos entre lecturas |
+| `SHUTDOWN_VOLTAGE` | 11.0 | Voltaje crítico de batería |
+| `SHUTDOWN_DELAY` | 300 | Segundos antes de apagar en corte |
+
+---
+
+# 📊 Datos disponibles
+
+En `ups_status.json`:
+
+- `input_voltage` → Tensión de red (V)
+- `battery_voltage` → Tensión de batería (V)
+- `load_percent` → Carga conectada (%)
+- `on_battery` → true / false
+- `timestamp` → Última actualización
+
+---
+
+# 🔋 Apagado automático
+
+El contenedor puede solicitar apagado del NAS cuando:
+
+- Batería < 11.0V
+- Corte dura > 5 minutos
+
+Se genera el archivo:
+
+```
+/share/UPS/ups-docker/data/SHUTDOWN_REQUESTED
+```
+
+Para ejecutarlo, crear script en el NAS:
+
+```bash
 # /share/UPS/check_shutdown.sh
+
 if [ -f /share/UPS/ups-docker/data/SHUTDOWN_REQUESTED ]; then
     /sbin/poweroff
 fi
+```
+
+Se recomienda ejecutarlo periódicamente vía `cron`.
+
+---
+
+# 🧩 Decisiones de Diseño
+
+- Sin dependencias pesadas (no se usa NUT)
+- Persistencia en volumen externo
+- Diseño tolerante a reinicios del NAS
+- Separación clara: app / data / logs
+- Integración simple con scripts del sistema
+
+---
+
+# 📄 Licencia
+
+MIT License

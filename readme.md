@@ -12,14 +12,14 @@ Compatible con Windows y QNAP (Docker).
 
 ## 📁 Estructura del proyecto
 
-
+```
 .
-├── windows/ # Script Python para Windows
-│ └── ups_monitor.py
-├── ups-docker/ # Contenedor Docker para QNAP NAS
-│ └── README.md
+├── windows/          # Script Python para Windows
+│   └── ups_monitor.py
+├── ups-docker/       # Contenedor Docker para QNAP NAS
+│   └── README.md
 └── README.md
-
+```
 
 ---
 
@@ -30,103 +30,103 @@ Compatible con Windows y QNAP (Docker).
 ```bash
 cd windows
 python ups_monitor.py
-📦 QNAP (NAS)
+```
+
+### 📦 QNAP (NAS)
+
+```bash
 cd ups-docker
+```
 
 Ver instrucciones completas en:
 
+```
 ups-docker/README.md
-⚡ Características
+```
 
-Lectura en tiempo real:
+---
 
-Tensión de red
+## ⚡ Características
 
-Nivel de batería
+- Lectura en tiempo real:
+  - Tensión de red
+  - Nivel de batería
+  - Carga
+  - Frecuencia
+- Detección automática de cortes de energía
+- Logs con rotación automática (5MB)
+- Apagado automático del NAS por batería baja o corte prolongado
+- Salida JSON para integraciones
+- Arquitectura portable (Windows / Linux / Docker)
 
-Carga
+---
 
-Frecuencia
-
-Detección automática de cortes de energía
-
-Logs con rotación automática (5MB)
-
-Apagado automático del NAS por batería baja o corte prolongado
-
-Salida JSON para integraciones
-
-Arquitectura portable (Windows / Linux / Docker)
-
-🏗 Arquitectura Técnica
+## 🏗 Arquitectura Técnica
 
 El sistema se compone de tres capas principales:
 
-1️⃣ Capa de comunicación USB HID
+### 1️⃣ Capa de comunicación USB HID
+- Comunicación directa con el UPS vía USB.
+- Implementación del protocolo **Voltronic-QS**.
+- Polling periódico con timeout controlado.
+- Manejo robusto de reconexión.
 
-Comunicación directa con el UPS vía USB.
+### 2️⃣ Capa de procesamiento
+- Parseo de respuestas del UPS.
+- Normalización de métricas.
+- Detección de eventos:
+  - Corte de red
+  - Retorno de energía
+  - Batería baja
+  - Sobrecarga
 
-Implementación del protocolo Voltronic-QS.
+### 3️⃣ Capa de acciones
+- Logger con rotación automática.
+- Salida JSON estructurada.
+- Trigger configurable de apagado seguro del sistema.
+- Integración simple con sistemas externos (REST, scripts, monitoreo).
 
-Polling periódico con timeout controlado.
+### 🔁 Flujo simplificado
 
-Manejo robusto de reconexión.
-
-2️⃣ Capa de procesamiento
-
-Parseo de respuestas del UPS.
-
-Normalización de métricas.
-
-Detección de eventos:
-
-Corte de red
-
-Retorno de energía
-
-Batería baja
-
-Sobrecarga
-
-3️⃣ Capa de acciones
-
-Logger con rotación automática.
-
-Salida JSON estructurada.
-
-Trigger configurable de apagado seguro del sistema.
-
-Integración simple con sistemas externos (REST, scripts, monitoreo).
-
-🔁 Flujo simplificado
+```
 UPS → USB HID → Parser → Motor de eventos → Logger / Shutdown / JSON
-🔌 Compatibilidad
+```
+
+---
+
+## 🔌 Compatibilidad
 
 Testeado con:
 
-UPS Vertiv PSL650-230VA
+- UPS Vertiv PSL650-230VA
+- QNAP TS series (QTS 5.x)
+- Windows 10 / 11
 
-QNAP TS series (QTS 5.x)
+Otros modelos Vertiv/Liebert compatibles con protocolo **Voltronic-QS** podrían funcionar.
 
-Windows 10 / 11
+---
 
-Otros modelos Vertiv/Liebert compatibles con protocolo Voltronic-QS podrían funcionar.
+## 📄 Licencia
 
-📄 Licencia
+MIT License – Ver `LICENSE`
 
-MIT License – Ver LICENSE
+---
 
-👤 Autor
+## 👤 Autor
 
-Martín A. De Luca
-@tinchodeluca
+**Martín A. De Luca**  
+[@tinchodeluca](https://github.com/tinchodeluca)
 
-🤝 Contribuciones
+---
 
-PRs bienvenidos.
+## 🤝 Contribuciones
+
+PRs bienvenidos.  
 Para cambios grandes, abrir un issue primero.
 
-⚠️ Disclaimer
+---
 
-Este proyecto no está afiliado con Vertiv.
+## ⚠️ Disclaimer
+
+Este proyecto no está afiliado con Vertiv ni con Qnap.  
 Úsalo bajo tu propia responsabilidad.
