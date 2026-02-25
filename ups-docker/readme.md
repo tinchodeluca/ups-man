@@ -1,9 +1,14 @@
-# UPS Vertiv PSL650 - Monitor para QNAP
+<p align="center">
+  <img src="../assets/logo.png" alt="UPS-MAN Logo" width="600">
+</p>
 
-![Docker](https://img.shields.io/badge/docker-required-blue)
-![Platform](https://img.shields.io/badge/platform-QNAP%20QTS%205.x-lightgrey)
-![Protocol](https://img.shields.io/badge/protocol-Voltronic--QS-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue">
+  <img src="https://img.shields.io/badge/license-MIT-green">
+  <img src="https://img.shields.io/badge/docker-supported-blue">
+</p>
+
+# UPS Vertiv PSL650 - Monitor para QNAP
 
 Monitor de UPS Vertiv PSL650 vía USB usando Docker en QNAP.
 

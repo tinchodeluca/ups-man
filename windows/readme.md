@@ -1,9 +1,14 @@
-# UPS Monitor - Windows
+<p align="center">
+  <img src="../assets/logo.png" alt="UPS-MAN Logo" width="600">
+</p>
 
-![Python](https://img.shields.io/badge/python-3.8%2B-blue)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![Protocol](https://img.shields.io/badge/protocol-Voltronic--QS-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue">
+  <img src="https://img.shields.io/badge/license-MIT-green">
+  <img src="https://img.shields.io/badge/docker-supported-blue">
+</p>
+
+# UPS Monitor - Windows
 
 Script Python para monitorear UPS Vertiv PSL650 en Windows vía USB HID.
 

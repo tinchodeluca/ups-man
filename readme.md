@@ -1,9 +1,14 @@
-# UPS Vertiv PSL650 Monitor
+<p align="center">
+  <img src="assets/logo.png" alt="UPS-MAN Logo" width="600">
+</p>
 
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
-![Docker](https://img.shields.io/badge/docker-supported-blue)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20QNAP-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.8%2B-blue">
+  <img src="https://img.shields.io/badge/license-MIT-green">
+  <img src="https://img.shields.io/badge/docker-supported-blue">
+</p>
+
+# UPS Vertiv PSL650 Monitor
 
 Monitoreo del **UPS Vertiv PSL650-230VA** por USB HID.  
 Compatible con Windows y QNAP (Docker).
