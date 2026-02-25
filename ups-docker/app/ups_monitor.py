@@ -29,9 +29,9 @@ logger = logging.getLogger(__name__)
 # Config desde variables de entorno
 VID = int(os.getenv('UPS_VID', '0x0665'), 16)
 PID = int(os.getenv('UPS_PID', '0x5161'), 16)
-CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', '10'))
+CHECK_INTERVAL   = int(os.getenv('CHECK_INTERVAL', '10'))
 SHUTDOWN_VOLTAGE = float(os.getenv('SHUTDOWN_VOLTAGE', '11.0'))
-SHUTDOWN_DELAY = int(os.getenv('SHUTDOWN_DELAY', '300'))  # 5 minutos
+SHUTDOWN_DELAY   = int(os.getenv('SHUTDOWN_DELAY', '300'))  # 5 minutos
 
 @dataclass
 class EventoCorte:
@@ -127,14 +127,14 @@ class UPSMonitor:
             input_v = float(parts[0])
             
             self.data = {
-                'input_voltage': input_v,
-                'output_voltage': float(parts[2]),
-                'load_percent': int(parts[3]),
-                'frequency': float(parts[4]),
-                'battery_voltage': float(parts[5]),
-                'temperature': float(temp_str) if temp_str != '--.-' else None,
-                'status_bits': parts[7],
-                'on_battery': input_v < 100.0,
+                'input_voltage'   : input_v,
+                'output_voltage'  : float(parts[2]),
+                'load_percent'    : int(parts[3]),
+                'frequency'       : float(parts[4]),
+                'battery_voltage' : float(parts[5]),
+                'temperature'     : float(temp_str) if temp_str != '--.-' else None,
+                'status_bits'     : parts[7],
+                'on_battery'      : input_v < 100.0,
             }
             self.timestamp = datetime.now()
             
@@ -168,12 +168,12 @@ class UPSMonitor:
         
         # Fin corte
         elif not en_bateria and self._corte_actual:
-            corte = self._corte_actual
+            corte     = self._corte_actual
             corte.fin = ahora
             corte.voltaje_final_bateria = self.BatVoltage
             
             inicio = datetime.fromisoformat(corte.inicio)
-            fin = datetime.fromisoformat(corte.fin)
+            fin    = datetime.fromisoformat(corte.fin)
             corte.duracion_segundos = (fin - inicio).total_seconds()
             
             self._eventos.append(corte)
@@ -188,7 +188,7 @@ class UPSMonitor:
             return
         
         # Calcular duración
-        inicio = datetime.fromisoformat(self._corte_actual.inicio)
+        inicio   = datetime.fromisoformat(self._corte_actual.inicio)
         duracion = (datetime.now() - inicio).total_seconds()
         
         # Condiciones de apagado
