@@ -1,71 +1,132 @@
 # UPS Vertiv PSL650 Monitor
 
-Monitoreo del UPS Vertiv PSL650-230VA por USB HID. Compatible con Windows y QNAP (Docker).
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Docker](https://img.shields.io/badge/docker-supported-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20QNAP-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## 📁 Estructura
-├── windows/          # Script Python para Windows
-│   └── README.md     # Documentación de la clase
-├── ups-docker/      # Contenedor Docker para QNAP NAS
-│   └── README.md     # Instrucciones Docker
-└── README.md         # Este archivo
-plain
-Copy
+Monitoreo del **UPS Vertiv PSL650-230VA** por USB HID.  
+Compatible con Windows y QNAP (Docker).
+
+---
+
+## 📁 Estructura del proyecto
+
+
+.
+├── windows/ # Script Python para Windows
+│ └── ups_monitor.py
+├── ups-docker/ # Contenedor Docker para QNAP NAS
+│ └── README.md
+└── README.md
+
+
+---
 
 ## 🚀 Uso rápido
 
-### Windows (PC)
+### 🖥 Windows (PC)
+
 ```bash
 cd windows
 python ups_monitor.py
-QNAP (NAS)
-bash
-Copy
+📦 QNAP (NAS)
 cd ups-docker
-# Ver instrucciones completas en ups-docker/README.md
+
+Ver instrucciones completas en:
+
+ups-docker/README.md
 ⚡ Características
-Lectura en tiempo real: tensión de red, batería, carga, frecuencia
+
+Lectura en tiempo real:
+
+Tensión de red
+
+Nivel de batería
+
+Carga
+
+Frecuencia
+
 Detección automática de cortes de energía
+
 Logs con rotación automática (5MB)
+
 Apagado automático del NAS por batería baja o corte prolongado
+
 Salida JSON para integraciones
+
+Arquitectura portable (Windows / Linux / Docker)
+
+🏗 Arquitectura Técnica
+
+El sistema se compone de tres capas principales:
+
+1️⃣ Capa de comunicación USB HID
+
+Comunicación directa con el UPS vía USB.
+
+Implementación del protocolo Voltronic-QS.
+
+Polling periódico con timeout controlado.
+
+Manejo robusto de reconexión.
+
+2️⃣ Capa de procesamiento
+
+Parseo de respuestas del UPS.
+
+Normalización de métricas.
+
+Detección de eventos:
+
+Corte de red
+
+Retorno de energía
+
+Batería baja
+
+Sobrecarga
+
+3️⃣ Capa de acciones
+
+Logger con rotación automática.
+
+Salida JSON estructurada.
+
+Trigger configurable de apagado seguro del sistema.
+
+Integración simple con sistemas externos (REST, scripts, monitoreo).
+
+🔁 Flujo simplificado
+UPS → USB HID → Parser → Motor de eventos → Logger / Shutdown / JSON
 🔌 Compatibilidad
+
 Testeado con:
+
 UPS Vertiv PSL650-230VA
-QNAP TS-xxx (QTS 5.x)
-Windows 10/11
-Otros modelos Vertiv/Liebert con protocolo Voltronic-QS pueden funcionar.
+
+QNAP TS series (QTS 5.x)
+
+Windows 10 / 11
+
+Otros modelos Vertiv/Liebert compatibles con protocolo Voltronic-QS podrían funcionar.
+
 📄 Licencia
-MIT License - Ver LICENSE
+
+MIT License – Ver LICENSE
+
 👤 Autor
+
+Martín A. De Luca
 @tinchodeluca
+
 🤝 Contribuciones
-PRs bienvenidos. Para cambios grandes, abrir issue primero.
+
+PRs bienvenidos.
+Para cambios grandes, abrir un issue primero.
+
 ⚠️ Disclaimer
-Este proyecto no está afiliado con Vertiv. Úsalo bajo tu propia responsabilidad.
 
-## `LICENSE` 
-
-```text
-MIT License
-
-Copyright (c) 2026 [Martín A. De Luca]
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
----
+Este proyecto no está afiliado con Vertiv.
+Úsalo bajo tu propia responsabilidad.
