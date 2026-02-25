@@ -9,15 +9,21 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, List
 
+from logging.handlers import RotatingFileHandler
+
 # Configurar logging
+handler = RotatingFileHandler(
+    '/app/logs/ups.log', 
+    maxBytes=5*1024*1024,  # 5 MB máximo
+    backupCount=3          # Mantener 3 backups
+)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('/app/logs/ups.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[handler, logging.StreamHandler(sys.stdout)]
 )
+
 logger = logging.getLogger(__name__)
 
 # Config desde variables de entorno
