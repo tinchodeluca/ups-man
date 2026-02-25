@@ -1,75 +1,71 @@
-UPS Vertiv PSL650 - Monitor para QNAP
-Monitor de UPS Vertiv PSL650 vía USB usando Docker en QNAP.
-📁 Estructura
+# UPS Vertiv PSL650 Monitor
+
+Monitoreo del UPS Vertiv PSL650-230VA por USB HID. Compatible con Windows y QNAP (Docker).
+
+## 📁 Estructura
+├── windows/          # Script Python para Windows
+│   └── README.md     # Documentación de la clase
+├── ups-docker/      # Contenedor Docker para QNAP NAS
+│   └── README.md     # Instrucciones Docker
+└── README.md         # Este archivo
 plain
 Copy
-/share/UPS/ups-docker/
-├── app/
-│   ├── ups_monitor.py      # Script principal
-│   └── requirements.txt    # Dependencias
-├── data/
-│   ├── ups_status.json     # Estado actual del UPS
-│   ├── ups_events.json     # Historial de cortes
-│   └── SHUTDOWN_REQUESTED  # Flag de apagado (si aplica)
-└── logs/
-    └── ups.log             # Logs con rotación (5MB x 3 archivos)
-🚀 Comandos útiles
-Ver estado
+
+## 🚀 Uso rápido
+
+### Windows (PC)
+```bash
+cd windows
+python ups_monitor.py
+QNAP (NAS)
 bash
 Copy
-# Logs en vivo
-docker -H unix:///var/run/system-docker.sock logs -f vertiv-ups
+cd ups-docker
+# Ver instrucciones completas en ups-docker/README.md
+⚡ Características
+Lectura en tiempo real: tensión de red, batería, carga, frecuencia
+Detección automática de cortes de energía
+Logs con rotación automática (5MB)
+Apagado automático del NAS por batería baja o corte prolongado
+Salida JSON para integraciones
+🔌 Compatibilidad
+Testeado con:
+UPS Vertiv PSL650-230VA
+QNAP TS-xxx (QTS 5.x)
+Windows 10/11
+Otros modelos Vertiv/Liebert con protocolo Voltronic-QS pueden funcionar.
+📄 Licencia
+MIT License - Ver LICENSE
+👤 Autor
+@tinchodeluca
+🤝 Contribuciones
+PRs bienvenidos. Para cambios grandes, abrir issue primero.
+⚠️ Disclaimer
+Este proyecto no está afiliado con Vertiv. Úsalo bajo tu propia responsabilidad.
 
-# Últimas 50 líneas
-docker -H unix:///var/run/system-docker.sock logs --tail 50 vertiv-ups
+## `LICENSE` 
 
-# Estado del contenedor
-docker -H unix:///var/run/system-docker.sock ps
-Datos del UPS
-bash
-Copy
-# Estado actual (JSON)
-cat /share/UPS/ups-docker/data/ups_status.json
+```text
+MIT License
 
-# Eventos de corte
-cat /share/UPS/ups-docker/data/ups_events.json
-Control
-bash
-Copy
-# Parar
-docker -H unix:///var/run/system-docker.sock stop vertiv-ups
+Copyright (c) 2026 [Martín A. De Luca]
 
-# Iniciar
-docker -H unix:///var/run/system-docker.sock start vertiv-ups
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-# Reiniciar
-docker -H unix:///var/run/system-docker.sock restart vertiz-ups
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-# Eliminar (conserva datos en /data y /logs)
-docker -H unix:///var/run/system-docker.sock rm vertiv-ups
-⚡ Configuración
-Variables en el comando docker run:
-Table
-Copy
-Variable	Default	Descripción
-CHECK_INTERVAL	10	Segundos entre lecturas
-SHUTDOWN_VOLTAGE	11.0	Voltaje crítico de batería
-SHUTDOWN_DELAY	300	Segundos antes de apagar en corte
-📊 Datos disponibles
-En ups_status.json:
-input_voltage - Tensión de red (V)
-battery_voltage - Tensión de batería (V)
-load_percent - Carga conectada (%)
-on_battery - true/false
-timestamp - Última actualización
-🔋 Apagado automático
-El contenedor puede apagar el NAS cuando:
-Batería < 11.0V, o
-Corte dura > 5 minutos
-Para que funcione, crear script en el NAS que lea el flag:
-bash
-Copy
-# /share/UPS/check_shutdown.sh
-if [ -f /share/UPS/ups-docker/data/SHUTDOWN_REQUESTED ]; then
-    /sbin/poweroff
-fi
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
