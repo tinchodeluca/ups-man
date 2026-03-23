@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -32,6 +33,18 @@ PID = int(os.getenv('UPS_PID', '0x5161'), 16)
 CHECK_INTERVAL   = int(os.getenv('CHECK_INTERVAL', '10'))
 SHUTDOWN_VOLTAGE = float(os.getenv('SHUTDOWN_VOLTAGE', '11.0'))
 SHUTDOWN_DELAY   = int(os.getenv('SHUTDOWN_DELAY', '300'))  # 5 minutos
+
+# Validar rangos de config
+if not (0 < VID <= 0xFFFF):
+    raise ValueError(f"UPS_VID inválido: {VID:#06x}")
+if not (0 < PID <= 0xFFFF):
+    raise ValueError(f"UPS_PID inválido: {PID:#06x}")
+if CHECK_INTERVAL < 1:
+    raise ValueError(f"CHECK_INTERVAL debe ser >= 1, valor: {CHECK_INTERVAL}")
+if not (5.0 <= SHUTDOWN_VOLTAGE <= 20.0):
+    raise ValueError(f"SHUTDOWN_VOLTAGE fuera de rango (5-20V): {SHUTDOWN_VOLTAGE}")
+if SHUTDOWN_DELAY < 0:
+    raise ValueError(f"SHUTDOWN_DELAY no puede ser negativo: {SHUTDOWN_DELAY}")
 
 @dataclass
 class EventoCorte:
@@ -124,15 +137,37 @@ class UPSMonitor:
                 return False
             
             temp_str = parts[6]
-            input_v = float(parts[0])
-            
+            input_v      = float(parts[0])
+            output_v     = float(parts[2])
+            load_pct     = int(parts[3])
+            frequency    = float(parts[4])
+            battery_v    = float(parts[5])
+            temperature  = float(temp_str) if temp_str not in ('--.-', '---.-', 'N/A') else None
+
+            # Validar rangos antes de usar los datos
+            if not (0.0 <= input_v <= 300.0):
+                logger.warning(f"input_voltage fuera de rango: {input_v}V — descartando lectura")
+                return False
+            if not (0.0 <= output_v <= 300.0):
+                logger.warning(f"output_voltage fuera de rango: {output_v}V — descartando lectura")
+                return False
+            if not (0 <= load_pct <= 100):
+                logger.warning(f"load_percent fuera de rango: {load_pct}% — descartando lectura")
+                return False
+            if not (40.0 <= frequency <= 70.0):
+                logger.warning(f"frequency fuera de rango: {frequency}Hz — descartando lectura")
+                return False
+            if not (0.0 <= battery_v <= 30.0):
+                logger.warning(f"battery_voltage fuera de rango: {battery_v}V — descartando lectura")
+                return False
+
             self.data = {
                 'input_voltage'   : input_v,
-                'output_voltage'  : float(parts[2]),
-                'load_percent'    : int(parts[3]),
-                'frequency'       : float(parts[4]),
-                'battery_voltage' : float(parts[5]),
-                'temperature'     : float(temp_str) if temp_str != '--.-' else None,
+                'output_voltage'  : output_v,
+                'load_percent'    : load_pct,
+                'frequency'       : frequency,
+                'battery_voltage' : battery_v,
+                'temperature'     : temperature,
                 'status_bits'     : parts[7],
                 'on_battery'      : input_v < 100.0,
             }
@@ -214,61 +249,84 @@ class UPSMonitor:
         flag_file.write_text(f"Shutdown requested at {datetime.now().isoformat()}")
         logger.info("Creado flag de apagado")
     
+    def _atomic_write(self, path: Path, data: object):
+        """Escribe JSON de forma atómica: escribe a .tmp y luego renombra."""
+        dir_ = path.parent
+        with tempfile.NamedTemporaryFile('w', dir=dir_, delete=False, suffix='.tmp') as tmp:
+            json.dump(data, tmp, indent=2)
+            tmp_path = tmp.name
+        os.replace(tmp_path, path)
+
     def save_status(self):
         """Guarda estado actual en JSON"""
         if not self.data:
             return
-        
+
         output = {
             **self.data,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'corte_en_curso': self._corte_actual is not None,
         }
-        
+
         if self._corte_actual:
             inicio = datetime.fromisoformat(self._corte_actual.inicio)
             output['duracion_corte_seg'] = (datetime.now() - inicio).total_seconds()
-        
-        with open(self.status_file, 'w') as f:
-            json.dump(output, f, indent=2)
-    
+
+        self._atomic_write(self.status_file, output)
+
     def save_events(self):
         """Guarda eventos en JSON"""
         eventos = [asdict(e) for e in self._eventos]
         if self._corte_actual:
             eventos.append(asdict(self._corte_actual))
-        
-        with open(self.events_file, 'w') as f:
-            json.dump(eventos, f, indent=2)
+
+        self._atomic_write(self.events_file, eventos)
     
+    def _connect_with_backoff(self) -> bool:
+        """Intenta conectar con backoff exponencial. Retorna False si se interrumpe."""
+        delay = 10
+        max_delay = 300  # tope de 5 minutos entre intentos
+        attempt = 0
+        while True:
+            attempt += 1
+            logger.info(f"Intento de conexión #{attempt}...")
+            if self.connect():
+                return True
+            logger.error(f"Conexión fallida. Reintentando en {delay}s...")
+            try:
+                time.sleep(delay)
+            except KeyboardInterrupt:
+                return False
+            delay = min(delay * 2, max_delay)
+
     def run(self):
         """Loop principal"""
         logger.info("Iniciando monitor UPS...")
-        
-        if not self.connect():
-            logger.error("No se pudo conectar. Reintentando en 30s...")
-            time.sleep(30)
-            return self.run()
-        
+
+        if not self._connect_with_backoff():
+            logger.info("Detenido durante reconexión inicial.")
+            return
+
         try:
             while True:
                 if self.read_data():
                     self.check_events()
                     self.check_shutdown()
                     self.save_status()
-                    
-                    # Log resumen
+
                     status = "BAT" if self.OnBattery else "LINE"
                     logger.info(f"{status} | {self.InVoltage:.1f}V | "
-                              f"Bat:{self.BatVoltage:.1f}V | Load:{self.LoadPercent}%")
+                                f"Bat:{self.BatVoltage:.1f}V | Load:{self.LoadPercent}%")
                 else:
                     logger.warning("Fallo lectura")
-                    # Reconectar si es necesario
                     if not self.device:
-                        self.connect()
-                
+                        logger.warning("Dispositivo desconectado — intentando reconectar...")
+                        self.disconnect()
+                        if not self._connect_with_backoff():
+                            break
+
                 time.sleep(CHECK_INTERVAL)
-                
+
         except KeyboardInterrupt:
             logger.info("Detenido por usuario")
         finally:

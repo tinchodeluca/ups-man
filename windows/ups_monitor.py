@@ -1,8 +1,10 @@
 import hid
 import time
 import json
+import os
 import statistics
-from datetime import datetime, timedelta
+import tempfile
+from datetime import datetime
 from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -234,23 +236,44 @@ class VertivUPS:
             if len(parts) < 8:
                 return None
             
-            temp_str = parts[6]
-            temperature = float(temp_str) if temp_str != '--.-' else None
-            input_v = float(parts[0])
-            
+            temp_str    = parts[6]
+            temperature = float(temp_str) if temp_str not in ('--.-', '---.-', 'N/A') else None
+            input_v     = float(parts[0])
+            output_v    = float(parts[2])
+            load_pct    = int(parts[3])
+            frequency   = float(parts[4])
+            battery_v   = float(parts[5])
+
+            # Validar rangos antes de aceptar la lectura
+            if not (0.0 <= input_v <= 300.0):
+                print(f"[WARN] input_voltage fuera de rango: {input_v}V — descartando")
+                return None
+            if not (0.0 <= output_v <= 300.0):
+                print(f"[WARN] output_voltage fuera de rango: {output_v}V — descartando")
+                return None
+            if not (0 <= load_pct <= 100):
+                print(f"[WARN] load_percent fuera de rango: {load_pct}% — descartando")
+                return None
+            if not (40.0 <= frequency <= 70.0):
+                print(f"[WARN] frequency fuera de rango: {frequency}Hz — descartando")
+                return None
+            if not (0.0 <= battery_v <= 30.0):
+                print(f"[WARN] battery_voltage fuera de rango: {battery_v}V — descartando")
+                return None
+
             return {
-                'input_voltage': input_v,
-                'fault_voltage': float(parts[1]),
-                'output_voltage': float(parts[2]),
-                'load_percent': int(parts[3]),
-                'frequency': float(parts[4]),
-                'battery_voltage': float(parts[5]),
-                'temperature': temperature,
-                'status_bits': parts[7],
-                'on_battery': input_v < 100.0,
-                'raw': text[:100]
+                'input_voltage'  : input_v,
+                'fault_voltage'  : float(parts[1]),
+                'output_voltage' : output_v,
+                'load_percent'   : load_pct,
+                'frequency'      : frequency,
+                'battery_voltage': battery_v,
+                'temperature'    : temperature,
+                'status_bits'    : parts[7],
+                'on_battery'     : input_v < 100.0,
+                'raw'            : text[:100]
             }
-            
+
         except (ValueError, IndexError):
             return None
     
@@ -287,11 +310,19 @@ class VertivUPS:
             print(f"[EVENTO] Fin de corte - Duración: {corte.duracion_segundos:.1f}s")
             self._guardar_eventos()
     
+    def _atomic_write(self, path: Path, data: object):
+        """Escribe JSON de forma atómica: escribe a .tmp y luego renombra."""
+        dir_ = path.parent
+        with tempfile.NamedTemporaryFile('w', dir=dir_, delete=False, suffix='.tmp') as tmp:
+            json.dump(data, tmp, indent=2)
+            tmp_path = tmp.name
+        os.replace(tmp_path, path)
+
     def _guardar_json(self):
         """Guarda estado actual en JSON"""
         if not self._data:
             return
-        
+
         output = {
             **self._data,
             'timestamp': self._timestamp.isoformat() if self._timestamp else None,
@@ -300,15 +331,13 @@ class VertivUPS:
             'corte_en_curso': asdict(self._corte_actual) if self._corte_actual else None,
             'duracion_corte_actual_seg': self.DuracionCorteActual
         }
-        
-        with open(self._json_file, 'w') as f:
-            json.dump(output, f, indent=2)
-    
+
+        self._atomic_write(self._json_file, output)
+
     def _guardar_eventos(self):
         """Guarda historial de eventos en JSON"""
         eventos_dict = [asdict(e) for e in self._eventos_corte]
-        with open(self._eventos_file, 'w') as f:
-            json.dump(eventos_dict, f, indent=2)
+        self._atomic_write(self._eventos_file, eventos_dict)
     
     # =========================================================================
     # UTILIDADES
@@ -346,46 +375,64 @@ class VertivUPS:
 # EJEMPLO DE USO EN TU NAS (lógica de decisiones)
 # =============================================================================
 
+def _connect_with_backoff(ups: VertivUPS) -> bool:
+    """Intenta conectar con backoff exponencial. Retorna False si se interrumpe."""
+    delay = 10
+    max_delay = 300
+    attempt = 0
+    while True:
+        attempt += 1
+        print(f"Intento de conexión #{attempt}...")
+        if ups.connect():
+            print("UPS conectado.")
+            return True
+        print(f"Conexión fallida. Reintentando en {delay}s...")
+        try:
+            time.sleep(delay)
+        except KeyboardInterrupt:
+            return False
+        delay = min(delay * 2, max_delay)
+
+
 def main():
     ups = VertivUPS()
-    
-    if not ups.connect():
-        print("No se pudo conectar al UPS")
+
+    if not _connect_with_backoff(ups):
+        print("\nDetenido durante conexión inicial.")
         return
-    
-    print("UPS conectado. Propiedades disponibles:")
-    print(f"  ups.InVoltage, ups.BatVoltage, ups.OnBattery, etc.\n")
-    
+
+    print("Propiedades disponibles: ups.InVoltage, ups.BatVoltage, ups.OnBattery, etc.\n")
+
     try:
         while True:
-            # 1. Refrescar datos (lectura USB)
             if ups.refresh():
-                
-                # 2. TU LÓGICA DE DECISIONES (ejemplo)
-                print(f"\n{ups}")  # Usa __str__
-                
-                # Ejemplo: detectar corte y enviar mail
+                print(f"\n{ups}")
+
                 if ups.OnBattery:
                     if ups.DuracionCorteActual and ups.DuracionCorteActual > 60:
                         print(f"  [ALERTA] Corte prolongado: {ups.DuracionCorteActual:.0f}s")
                         # aquí: enviar_mail("Corte prolongado")
-                    
-                    if ups.BatVoltage < 12.0:
+
+                    if ups.BatVoltage and ups.BatVoltage < 12.0:
                         print(f"  [CRÍTICO] Batería baja: {ups.BatVoltage}V - Apagando...")
                         # aquí: apagar_nas()
                         # break
-                
-                # Ejemplo: estadísticas
-                if len(ups.EventosCorte) > 0:
+
+                if ups.EventosCorte:
                     ultimo = ups.EventosCorte[-1]
                     print(f"  Último corte: {ultimo.duracion_segundos:.1f}s "
                           f"(de {ultimo.voltaje_inicial_bateria}V a {ultimo.voltaje_final_bateria}V)")
-                
+
             else:
                 print("Fallo lectura")
-            
+                if not ups.IsConnected:
+                    print("Dispositivo desconectado — intentando reconectar...")
+                    ups.disconnect()
+                    if not _connect_with_backoff(ups):
+                        break
+
             time.sleep(5)
-            
+
     except KeyboardInterrupt:
         print("\nDetenido.")
     finally:
