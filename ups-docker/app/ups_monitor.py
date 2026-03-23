@@ -62,7 +62,11 @@ class UPSMonitor:
         self._corte_actual: Optional[EventoCorte] = None
         self._eventos: List[EventoCorte] = []
         self._historial_bat: List[float] = []
-        
+
+        # Buzzer: estado trackeado por software (Q no da ACK)
+        self._buzzer_on: bool = False
+        self._bat_critica_avisada: bool = False
+
         # Archivos de salida
         self.status_file = Path('/app/data/ups_status.json')
         self.events_file = Path('/app/data/ups_events.json')
@@ -200,22 +204,29 @@ class UPSMonitor:
             )
             logger.warning(f"⚡ CORTE DE ENERGÍA - Bat: {self.BatVoltage}V")
             self.save_events()
-        
+            # 2 beeps cortos para avisar el corte
+            self.buzzer_beep(1.0)
+            time.sleep(0.3)
+            self.buzzer_beep(1.0)
+
         # Fin corte
         elif not en_bateria and self._corte_actual:
             corte     = self._corte_actual
             corte.fin = ahora
             corte.voltaje_final_bateria = self.BatVoltage
-            
+
             inicio = datetime.fromisoformat(corte.inicio)
             fin    = datetime.fromisoformat(corte.fin)
             corte.duracion_segundos = (fin - inicio).total_seconds()
-            
+
             self._eventos.append(corte)
             self._corte_actual = None
-            
+            self._bat_critica_avisada = False
+
             logger.info(f"✅ Retornó energía - Duración: {corte.duracion_segundos:.0f}s")
             self.save_events()
+            # 1 beep corto de confirmación
+            self.buzzer_beep(0.5)
     
     def check_shutdown(self):
         """Verifica si debe apagar el sistema"""
@@ -229,8 +240,11 @@ class UPSMonitor:
         # Condiciones de apagado
         if self.BatVoltage and self.BatVoltage < SHUTDOWN_VOLTAGE:
             logger.critical(f"🔋 BATERÍA CRÍTICA ({self.BatVoltage}V) - APAGANDO SISTEMA")
+            if not self._bat_critica_avisada:
+                self.buzzer_beep(4.0)
+                self._bat_critica_avisada = True
             self.shutdown()
-        
+
         elif duracion > SHUTDOWN_DELAY:
             logger.critical(f"⏱️ CORTE PROLONGADO ({duracion:.0f}s) - APAGANDO SISTEMA")
             self.shutdown()
@@ -249,6 +263,55 @@ class UPSMonitor:
         flag_file.write_text(f"Shutdown requested at {datetime.now().isoformat()}")
         logger.info("Creado flag de apagado")
     
+    def send_command(self, cmd: str) -> str:
+        """Envía un comando raw al UPS y devuelve la respuesta como string."""
+        if not self.device:
+            return ""
+        try:
+            payload = cmd.encode('ascii') + b'\r'
+            buf = bytes([0x00]) + payload + bytes(64 - len(payload))
+            self.device.write(buf)
+            time.sleep(0.3)
+
+            start = time.time()
+            fragments = []
+            while time.time() - start < 1.2:
+                data = self.device.read(64)
+                if data:
+                    clean = bytes(b for b in data if b != 0)
+                    if clean:
+                        fragments.append(clean.decode('ascii', errors='ignore'))
+                time.sleep(0.05)
+            return ''.join(fragments).strip()
+        except Exception as e:
+            logger.error(f"Error enviando comando: {e}")
+            return ""
+
+    def _buzzer_toggle(self):
+        self.send_command('Q')
+        self._buzzer_on = not self._buzzer_on
+
+    def buzzer_off(self):
+        if self._buzzer_on:
+            self._buzzer_toggle()
+
+    def buzzer_on(self):
+        if not self._buzzer_on:
+            self._buzzer_toggle()
+
+    def buzzer_beep(self, seconds: float = 2.0):
+        self.buzzer_on()
+        time.sleep(seconds)
+        self.buzzer_off()
+
+    def sync_buzzer_state(self):
+        """Lee bit 7 del status_bits para sincronizar estado del buzzer."""
+        if not self.data:
+            return
+        bits = self.data.get('status_bits', '')
+        if len(bits) == 8:
+            self._buzzer_on = (bits[7] == '1')
+
     def _atomic_write(self, path: Path, data: object):
         """Escribe JSON de forma atómica: escribe a .tmp y luego renombra."""
         dir_ = path.parent
@@ -306,6 +369,12 @@ class UPSMonitor:
         if not self._connect_with_backoff():
             logger.info("Detenido durante reconexión inicial.")
             return
+
+        # Primera lectura: sincronizar y silenciar buzzer
+        if self.read_data():
+            self.sync_buzzer_state()
+            self.buzzer_off()
+            logger.info("Buzzer silenciado al arranque.")
 
         try:
             while True:

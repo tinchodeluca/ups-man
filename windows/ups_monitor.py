@@ -2,6 +2,7 @@ import hid
 import time
 import json
 import os
+import sys
 import statistics
 import tempfile
 from datetime import datetime
@@ -42,7 +43,12 @@ class VertivUPS:
         # Eventos de corte
         self._eventos_corte: List[EventoCorte] = []
         self._corte_actual: Optional[EventoCorte] = None
-        
+
+        # Buzzer: estado trackeado por software
+        # El PSL650 no da ACK en Q, así que mantenemos estado propio.
+        # bit 7 del status_bits puede reflejarlo, pero no es fiable en todos los modelos.
+        self._buzzer_on: bool = False
+
         # Archivo de persistencia
         self._json_file = Path("ups_status.json")
         self._eventos_file = Path("ups_eventos.json")
@@ -289,26 +295,30 @@ class VertivUPS:
                 voltaje_inicial_bateria=data['battery_voltage']
             )
             print(f"[EVENTO] Corte de energía detectado - Bat: {data['battery_voltage']}V")
-        
+            # 2 beeps cortos para avisar el corte
+            self.buzzer_beep(1.0)
+            time.sleep(0.3)
+            self.buzzer_beep(1.0)
+
         # Fin de corte
         elif not en_bateria and self._corte_actual:
             corte = self._corte_actual
             corte.fin = ahora
             corte.voltaje_final_bateria = data['battery_voltage']
-            
+
             inicio = datetime.fromisoformat(corte.inicio)
             fin = datetime.fromisoformat(corte.fin)
             corte.duracion_segundos = (fin - inicio).total_seconds()
-            
-            # Calcular carga promedio durante el corte (aproximado)
-            # Aquí podrías mejorar con historial detallado
+
             corte.carga_promedio = data['load_percent']
-            
+
             self._eventos_corte.append(corte)
             self._corte_actual = None
-            
+
             print(f"[EVENTO] Fin de corte - Duración: {corte.duracion_segundos:.1f}s")
             self._guardar_eventos()
+            # 1 beep corto de confirmación: volvió la energía
+            self.buzzer_beep(0.5)
     
     def _atomic_write(self, path: Path, data: object):
         """Escribe JSON de forma atómica: escribe a .tmp y luego renombra."""
@@ -339,6 +349,67 @@ class VertivUPS:
         eventos_dict = [asdict(e) for e in self._eventos_corte]
         self._atomic_write(self._eventos_file, eventos_dict)
     
+    # =========================================================================
+    # COMANDOS
+    # =========================================================================
+
+    def send_command(self, cmd: str) -> str:
+        """Envía un comando raw al UPS y devuelve la respuesta como string."""
+        if not self.device:
+            return ""
+        try:
+            payload = cmd.encode('ascii') + b'\r'
+            buf = bytes([0x00]) + payload + bytes(64 - len(payload))
+            self.device.write(buf)
+            time.sleep(0.3)
+
+            start = time.time()
+            fragments = []
+            while time.time() - start < 1.2:
+                data = self.device.read(64)
+                if data:
+                    clean = bytes(b for b in data if b != 0)
+                    if clean:
+                        fragments.append(clean.decode('ascii', errors='ignore'))
+                time.sleep(0.05)
+            return ''.join(fragments).strip()
+        except Exception as e:
+            print(f"Error enviando comando: {e}")
+            return ""
+
+    def _buzzer_toggle(self):
+        """Envía Q y actualiza el estado interno."""
+        self.send_command('Q')
+        self._buzzer_on = not self._buzzer_on
+
+    def buzzer_off(self):
+        if self._buzzer_on:
+            self._buzzer_toggle()
+
+    def buzzer_on(self):
+        if not self._buzzer_on:
+            self._buzzer_toggle()
+
+    def buzzer_beep(self, seconds: float = 2.0):
+        """Prende el buzzer, espera, lo apaga."""
+        self.buzzer_on()
+        time.sleep(seconds)
+        self.buzzer_off()
+
+    def sync_buzzer_state(self):
+        """
+        Sincroniza el estado del buzzer con el hardware usando el bit 7
+        del status_bits. Si no está disponible, asume off.
+        Llamar una vez después del primer refresh() exitoso.
+        """
+        if not self._data:
+            return
+        bits = self._data.get('status_bits', '')
+        if len(bits) == 8:
+            self._buzzer_on = (bits[7] == '1')
+        # Si el bit no es fiable en este modelo, _buzzer_on queda en False
+        # y el primer buzzer_off() no mandará Q innecesariamente.
+
     # =========================================================================
     # UTILIDADES
     # =========================================================================
@@ -401,7 +472,15 @@ def main():
         print("\nDetenido durante conexión inicial.")
         return
 
+    # Primera lectura: sincronizar estado del buzzer y silenciarlo
+    if ups.refresh():
+        ups.sync_buzzer_state()
+        ups.buzzer_off()
+        print(f"Buzzer {'apagado' if not ups._buzzer_on else 'ya estaba apagado'}.")
+
     print("Propiedades disponibles: ups.InVoltage, ups.BatVoltage, ups.OnBattery, etc.\n")
+
+    _bat_critica_avisada = False  # evitar beep repetido en cada ciclo
 
     try:
         while True:
@@ -415,8 +494,13 @@ def main():
 
                     if ups.BatVoltage and ups.BatVoltage < 12.0:
                         print(f"  [CRÍTICO] Batería baja: {ups.BatVoltage}V - Apagando...")
+                        if not _bat_critica_avisada:
+                            ups.buzzer_beep(4.0)  # beep largo en batería crítica
+                            _bat_critica_avisada = True
                         # aquí: apagar_nas()
                         # break
+                else:
+                    _bat_critica_avisada = False  # reset si volvió la energía
 
                 if ups.EventosCorte:
                     ultimo = ups.EventosCorte[-1]
@@ -439,5 +523,91 @@ def main():
         ups.disconnect()
 
 
+_CLI_HELP = """
+Comandos conocidos:
+  qs          Query status (parseado)
+  f           Rating info (voltaje nominal, corriente, batería)
+  i           Manufacturer info (modelo, firmware)
+  q           Toggle buzzer
+  pda         Deshabilitar alarma permanentemente
+  pea         Rehabilitar alarma
+  t           Self-test 10 segundos
+  tl          Self-test hasta batería baja
+  c           Cancelar shutdown/test
+  s<n>        Shutdown en n×6s  (ej: s10 = 60s)
+  s<n>r<m>    Shutdown + restore (ej: s10r0020)
+  psdv<vv.v>  Set low battery voltage (ej: psdv11.0)
+  raw <cmd>   Enviar cualquier comando custom
+  help        Mostrar esta ayuda
+  quit / q!   Salir
+"""
+
+def cli_mode():
+    """CLI interactivo para explorar comandos del UPS."""
+    ups = VertivUPS()
+
+    print("=== UPS CLI ===")
+    print(f"Conectando a VID:{ups.vid:04X} PID:{ups.pid:04X}...")
+
+    if not ups.connect():
+        print("No se pudo conectar al UPS.")
+        return
+
+    print("Conectado. Escribí 'help' para ver los comandos.\n")
+
+    while True:
+        try:
+            line = input("ups> ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if not line:
+            continue
+
+        if line in ('quit', 'q!', 'exit'):
+            break
+
+        if line == 'help':
+            print(_CLI_HELP)
+            continue
+
+        # Comando QS con parseo bonito
+        if line == 'qs':
+            if ups.refresh():
+                print(f"  Input voltage  : {ups.InVoltage} V")
+                print(f"  Output voltage : {ups.OutVoltage} V")
+                print(f"  Battery voltage: {ups.BatVoltage} V")
+                print(f"  Load           : {ups.LoadPercent} %")
+                print(f"  Frequency      : {ups.Frequency} Hz")
+                print(f"  Temperature    : {ups.Temperature}")
+                print(f"  Status bits    : {ups.StatusBits}")
+                print(f"  On battery     : {ups.OnBattery}")
+            else:
+                print("  Sin respuesta o datos fuera de rango.")
+            continue
+
+        # Comando raw explícito
+        if line.startswith('raw '):
+            cmd = line[4:].strip()
+        else:
+            cmd = line.upper()  # el protocolo espera mayúsculas
+
+        if not cmd:
+            continue
+
+        print(f"  → enviando: {repr(cmd)}")
+        resp = ups.send_command(cmd)
+        if resp:
+            print(f"  ← respuesta: {repr(resp)}")
+        else:
+            print("  ← sin respuesta (comando no soportado o sin ACK)")
+
+    ups.disconnect()
+    print("Desconectado.")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == 'cli':
+        cli_mode()
+    else:
+        main()
