@@ -2,10 +2,7 @@ FROM python:3.11-alpine
 
 # Instalar dependencias de sistema para USB/HID
 RUN apk add --no-cache \
-    gcc \
-    musl-dev \
     libusb-dev \
-    hidapi-dev \
     eudev-dev
 
 # Crear usuario no-root (seguridad)

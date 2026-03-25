@@ -5,6 +5,7 @@ services:
     image: tinchodeluca/ups-monitor:latest
     container_name: ups-monitor
     privileged: true
+    user: root
     restart: unless-stopped
 
     environment:
@@ -16,9 +17,4 @@ services:
 
     volumes:
       - ./data:/app/data
-      - ./logs:/app/logs
       - /dev/bus/usb:/dev/bus/usb
-
-    # Alternativa: device específico en lugar de /dev/bus/usb completo
-    # devices:
-    #   - /dev/hidraw0:/dev/hidraw0

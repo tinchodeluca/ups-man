@@ -1,4 +1,8 @@
-import hid
+import usb.core
+import usb.util
+import usb.backend.libusb1
+
+_backend = usb.backend.libusb1.get_backend(find_library=lambda x: "/usr/lib/libusb-1.0.so.0")
 import time
 import json
 import logging
@@ -57,6 +61,7 @@ class EventoCorte:
 class UPSMonitor:
     def __init__(self):
         self.device = None
+        self._ep_in = None
         self.data: Optional[Dict] = None
         self.timestamp: Optional[datetime] = None
         self._corte_actual: Optional[EventoCorte] = None
@@ -92,19 +97,37 @@ class UPSMonitor:
     
     def connect(self) -> bool:
         try:
-            self.device = hid.device()
-            self.device.open(VID, PID)
-            self.device.set_nonblocking(True)
+            dev = usb.core.find(idVendor=VID, idProduct=PID, backend=_backend)
+            if dev is None:
+                raise Exception("Dispositivo no encontrado")
+            if dev.is_kernel_driver_active(0):
+                dev.detach_kernel_driver(0)
+            dev.set_configuration()
+            cfg = dev.get_active_configuration()
+            intf = cfg[(0, 0)]
+            self._ep_in = usb.util.find_descriptor(
+                intf, custom_match=lambda e:
+                usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN
+            )
+            if self._ep_in is None:
+                raise Exception("Endpoint IN no encontrado")
+            self.device = dev
             logger.info(f"UPS conectado VID:{VID:04X} PID:{PID:04X}")
             return True
         except Exception as e:
             logger.error(f"Error conectando: {e}")
+            self.device = None
+            self._ep_in = None
             return False
-    
+
     def disconnect(self):
         if self.device:
-            self.device.close()
+            try:
+                usb.util.dispose_resources(self.device)
+            except Exception:
+                pass
             self.device = None
+            self._ep_in = None
     
     def read_data(self) -> bool:
         """Lee datos del UPS"""
@@ -112,20 +135,24 @@ class UPSMonitor:
             return False
         
         try:
-            # Enviar QS
-            buf = bytes([0x00]) + b'QS\r' + bytes(64 - 4)
-            self.device.write(buf)
+            # Enviar QS via HID Set_Report (control transfer, no hay EP OUT)
+            payload = b'QS\r'
+            buf = payload + bytes(8 - len(payload))
+            self.device.ctrl_transfer(0x21, 9, 0x0200, 0, buf)
             time.sleep(0.1)
-            
+
             # Acumular respuesta
             start = time.time()
             fragments = []
             while time.time() - start < 1.2:
-                data = self.device.read(64)
-                if data:
-                    clean = bytes(b for b in data if b != 0)
-                    if clean:
-                        fragments.append(clean.decode('ascii', errors='ignore'))
+                try:
+                    data = self._ep_in.read(self._ep_in.wMaxPacketSize, timeout=100)
+                    if data:
+                        clean = bytes(b for b in data if b != 0)
+                        if clean:
+                            fragments.append(clean.decode('ascii', errors='ignore'))
+                except usb.core.USBTimeoutError:
+                    pass
                 time.sleep(0.05)
             
             text = ''.join(fragments)
@@ -269,18 +296,21 @@ class UPSMonitor:
             return ""
         try:
             payload = cmd.encode('ascii') + b'\r'
-            buf = bytes([0x00]) + payload + bytes(64 - len(payload))
-            self.device.write(buf)
+            buf = payload + bytes(8 - len(payload))
+            self.device.ctrl_transfer(0x21, 9, 0x0200, 0, buf)
             time.sleep(0.3)
 
             start = time.time()
             fragments = []
             while time.time() - start < 1.2:
-                data = self.device.read(64)
-                if data:
-                    clean = bytes(b for b in data if b != 0)
-                    if clean:
-                        fragments.append(clean.decode('ascii', errors='ignore'))
+                try:
+                    data = self._ep_in.read(self._ep_in.wMaxPacketSize, timeout=100)
+                    if data:
+                        clean = bytes(b for b in data if b != 0)
+                        if clean:
+                            fragments.append(clean.decode('ascii', errors='ignore'))
+                except usb.core.USBTimeoutError:
+                    pass
                 time.sleep(0.05)
             return ''.join(fragments).strip()
         except Exception as e:
